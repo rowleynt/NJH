@@ -3,7 +3,7 @@ import mysql.connector
 from time import sleep
 from datetime import date
 from User import User
-from pokemontcgsdk import *  # import * is bad practice, change in final version
+from pokemontcgsdk import *
 
 # TODO: add bio column to user table (varchar[255]), allow users to set their own bio from within the program
 #  add bio to profile
@@ -39,13 +39,10 @@ def main():
                     print("Invalid input")
                     sleep(0.3)
             clear_screen()
-
-        # TODO: when logged in, add menu options for:
-        #  search for card, see friends, make wishlist, make collection, view wishlist, view collection
         if state == "LOGGED IN":  # do this if user has logged in
             clear_screen()
             print("LOGGED IN AS", curr_user.getUsername())
-            print("[1]>log out [2]>search [3]>view your profile [4]>exit ")  # 2 and 3 are for debug, remember to remove
+            print("[1]>log out [2]>search [3]>view your profile [4]>follow other user [5]>exit ")
             choice = eval(input())
             match choice:
                 case 1:  # log out
@@ -56,9 +53,11 @@ def main():
                     input()
                 case 3:  # view your profile
                     clear_screen()
-                    display_profile(curr_user)
+                    display_profile(curr_user, njh)
                     input("\n<[Go Back]")
-                case 4:  # exit program
+                case 4:
+                    follow_user(njh, curr_user)
+                case 5:  # exit program
                     stop_code = 1
                 case _:  # wildcard
                     print("Invalid input")
@@ -123,6 +122,28 @@ def login_user(db):
     return create_user(c.fetchall()[0])  # returns User object from row with given username (usernames will be unique)
 
 
+def follow_user(db, current):
+    """Updates followers table in database with a new id (max + 1), target_id (who is being followed) and
+    follow_id (user doing the following"""
+    clear_screen()
+    target = input("Username of user to follow: ")
+    targetID = -1
+    c = db.cursor()
+    goodInput = False
+    while not goodInput:
+        c.execute(f"SELECT userID, username FROM user WHERE username = \'{target}\'")
+        fetch = c.fetchall()[0]
+        if target in fetch:
+            targetID = fetch[0]
+            goodInput = True
+        else:
+            print("Target user not found")
+    c.execute(f"SELECT id FROM followers")
+    id_next = c.fetchall()[-1][0] + 1
+    c.execute(f"INSERT INTO followers (id, target_id, follow_id) VALUES ({id_next}, {targetID}, {current.getUserID()});")
+    db.commit()
+
+
 # TODO: make search functionality smarter, implement while loop to check for good input
 def search(db):
     """Search module, very WIP"""
@@ -157,7 +178,7 @@ def search(db):
         case 2:  # search user # need to press enter twice to go back for some reason
             clear_screen()
             user = user_search_helper(db)
-            display_profile(user)
+            display_profile(user, db)
             input("\n<[Go Back]")
         case _:  # wildcard
             print("invalid input")
@@ -188,11 +209,20 @@ def user_search_helper(db):
     return user
 
 
-def display_profile(user):
+def display_profile(user, db):
     """Displays information of the passed User object"""
+    followers = []
+    c = db.cursor()
+    c.execute(f"SELECT follow_id FROM followers WHERE target_id = {user.getUserID()}")
+    temp = c.fetchall()
+    for ID in temp:
+        c.execute(f"SELECT username FROM user WHERE userID = {ID[0]}")
+        target_name = c.fetchall()[0][0]
+        followers.append(target_name)
+
     print(f"Viewing profile of user: {user.getUsername()}")
     print(f"\n>Default bio\n\nCurrent Decks: 0\n\nCurrent Wishlists: 0\n"
-          f"\nNumber of Followers: 0\n\nJoined On: {user.getJoinDate()}")
+          f"\nFollowers: {followers}\n\nJoined On: {user.getJoinDate()}")
 
 
 if __name__ == "__main__":
